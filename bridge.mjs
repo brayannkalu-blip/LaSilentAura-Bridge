@@ -11,6 +11,7 @@ import makeWASocket, {
   Browsers,
   downloadMediaMessage,
 } from 'baileys'
+import qrcode from 'qrcode-terminal'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const port = Number(process.env.PORT || 10000)
@@ -63,8 +64,7 @@ const api = (method) =>
 let telegramOffset = 0
 let waSocket = null
 let reconnectTimer = null
-let pairingPrinted = false
-let pairingRequested = false
+let qrShown = false
 
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms))
@@ -461,60 +461,39 @@ async function startWhatsApp() {
     async ({
       connection,
       lastDisconnect,
+      qr,
     }) => {
 
-      /*
-       * PAIRING FIX
-       *
-       * We wait for the WhatsApp connection to start
-       * before asking for the pairing code.
-       * The request is delayed slightly so the socket
-       * has time to become ready.
-       */
-
-      if (
-        connection === 'connecting' &&
-        !state.creds.registered &&
-        WHATSAPP_PHONE_NUMBER &&
-        !pairingRequested
-      ) {
-        pairingRequested = true
+      if (qr) {
+        qrShown = true
 
         console.log(
-          'WhatsApp connection starting — preparing pairing code...'
+          '\n╔══════════════════════════════════════╗'
+        )
+        console.log(
+          '║      WHATSAPP QR CODE — SCAN IT     ║'
+        )
+        console.log(
+          '╚══════════════════════════════════════╝\n'
         )
 
-        await sleep(4000)
+        qrcode.generate(qr, {
+          small: true,
+        })
 
-        try {
-          const code =
-            await waSocket.requestPairingCode(
-              WHATSAPP_PHONE_NUMBER
-            )
-
-          pairingPrinted = true
-
-          console.log(
-            `\nPAIRING CODE: ${code}\n`
-          )
-
-          console.log(
-            'Open WhatsApp → Linked devices → Link with phone number → enter this code.'
-          )
-
-        } catch (error) {
-          pairingRequested = false
-          pairingPrinted = false
-
-          console.error(
-            'Could not create pairing code:',
-            error?.message || error
-          )
-        }
+        console.log(
+          '\nOpen WhatsApp → Linked devices → Link a device'
+        )
+        console.log(
+          'Use your other phone to display this Railway QR.'
+        )
+        console.log(
+          'The QR may refresh; scan the newest one.\n'
+        )
       }
 
       if (connection === 'open') {
-        pairingPrinted = false
+        qrShown = false
 
         console.log(
           'WhatsApp connected ✓'
@@ -542,8 +521,6 @@ async function startWhatsApp() {
         if (
           code !== DisconnectReason.loggedOut
         ) {
-          pairingRequested = false
-
           clearTimeout(reconnectTimer)
 
           reconnectTimer = setTimeout(
